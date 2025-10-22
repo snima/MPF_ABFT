@@ -15,7 +15,7 @@ ticTotal = tic;
 % ========================= EASY CONTROL BLOCK ============================
 PROFILE     = 'large';    % 'tiny', 'small', 'medium', 'large'
 SEED_MULT   = 1.0;         % Seed multiplier (0.5 = half seeds for speed)
-SIZE_PRESET = 'tiny';    % 'single' = use PROFILE base size only, 'multi' = sweep sizes
+SIZE_PRESET = 'tiny';    % 'multi' = use PROFILE base size only, 'multi' = sweep sizes
 BASE_PINJECT= 0.20;
 
 % Headless figures
