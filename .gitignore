@@ -1,0 +1,10 @@
+# MATLAB
+*.asv
+*.m~
+
+# Output
+mpft_out/
+
+# OS
+.DS_Store
+Thumbs.db

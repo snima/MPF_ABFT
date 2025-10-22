@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "MPF_ABFT: Mixed-Precision Factorization with ABFT"
+authors:
+  - family-names: "Sahraneshinsamani"
+    given-names: "Nima"
+    email: "sahrans@uji.es"
+    affiliation: "Universitat Jaume I"
+  - family-names: "Catalán"
+    given-names: "Sandra"
+    email: "catalans@uji.es"
+    affiliation: "Universitat Jaume I"
+  - family-names: "Herrero"
+    given-names: "José R."
+    email: "josepr@ac.upc.edu"
+    affiliation: "Universitat Politècnica de Catalunya"
+version: 1.0.0
+date-released: 2025-10-22
+url: "https://github.com/yourusername/MPF_ABFT"
+repository-code: "https://github.com/yourusername/MPF_ABFT"
+keywords:
+  - soft-error-detection
+  - mixed-precision
+  - lu-decomposition
+  - abft
+  - fault-tolerance
+license: MIT
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Sahraneshinsamani"
+      given-names: "Nima"
+    - family-names: "Catalán"
+      given-names: "Sandra"
+    - family-names: "Herrero"
+      given-names: "José R."
+  title: "Exploiting Mixed-Precision Redundancy for Soft-Error Detection in LU Decomposition"
+  journal: "The Journal of Supercomputing"
+  year: 2025
+  status: "submitted"
