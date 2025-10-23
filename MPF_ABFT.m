@@ -13,15 +13,10 @@ format compact;
 ticTotal = tic;
 
 % ========================= EASY CONTROL BLOCK ============================
-PROFILE     = 'large';    % 'tiny', 'small', 'medium', 'large'
-SEED_MULT   = 1.0;         % Seed multiplier (0.5 = half seeds for speed)
-<<<<<<< HEAD
+PROFILE     = 'small';    % 'tiny', 'small', 'medium', 'large'
+SEED_MULT   = 0.5;         % Seed multiplier (0.5 = half seeds for speed)
 SIZE_PRESET = 'multi';    % 'single' = use PROFILE base size only, 'multi' = sweep sizes
-BASE_PINJECT= 1.0;
-=======
-SIZE_PRESET = 'tiny';    % 'multi' = use PROFILE base size only, 'multi' = sweep sizes
-BASE_PINJECT= 0.20;
->>>>>>> e56945fe3f28a5ebeaa0001e2ce1b7c90621ed3e
+BASE_PINJECT= 0.5;
 
 % Headless figures
 set(groot,'defaultFigureVisible','off');
@@ -67,27 +62,27 @@ doProductionAnalysis = false;
 switch lower(SIZE_PRESET)
     case 'single'
         % All tests use ONE consistent size from PROFILE
-        sizesVec = [m];
+        sizesVec = m;
     case 'multi'
         % Sweep multiple sizes (only for dedicated size studies)
         switch lower(PROFILE)
             case 'tiny'
-                sizesVec = [64 128];
+                sizesVec = [32 64];
             case 'small'
-                sizesVec = [128 256];
+                sizesVec = [64 128];
             case 'medium'
-                sizesVec = [256 512];
+                sizesVec = [128 256];
             case 'large'
-                sizesVec = [256 512 1024];
+                sizesVec = [256 512];
             otherwise
                 sizesVec = [256 512];
         end
     otherwise
-        sizesVec = [m];  % Default to base size
+        sizesVec = m;  % Default to base size
 end
 
-sizesVecGrid    = [512];
-wbVecGrid       = [64];
+sizesVecGrid    = 512;
+wbVecGrid       = 64;
 
 % Safety check
 maxNRequested = max([m, n, sizesVec(:).', sizesVecGrid(:).']);
@@ -899,7 +894,349 @@ maybe_export_and_close(outDir, saveOutputs, saveFigures, figFormats, figDPI);
         fprintf('  ✓ FP64 and FP16 CSV files saved\n');
     end
     
+    %clear S64_L S64_U Scls64_L Scls64_U bitIdxVec64;
+
+    %% ========================================================================
+    %  ENHANCED VISUALIZATIONS: FP16 vs FP64 COMPARISON
+    %% ========================================================================
+    
+    fprintf('\n=== Generating FP16 vs FP64 Comparison Plots ===\n');
+    
+    % Check which data we have available
+    have_fp16_L = exist('S_L', 'var');
+    have_fp16_U = exist('S_U', 'var');
+    have_fp16_cls_L = exist('Scls_L', 'var');
+    have_fp16_cls_U = exist('Scls_U', 'var');
+    
+    %% OPTION 1: Side-by-Side Per-Bit Comparison
+    fprintf('Creating Option 1: Side-by-Side Comparison...\n');
+    fig_side = figure('Position', [100 100 1600 800], 'Name', 'FP16_vs_FP64_SideBySide', 'Color', 'w');
+    tiledlayout(2, 1, 'Padding', 'compact', 'TileSpacing', 'compact');
+    
+    % Subplot 1: L-factor comparison
+    nexttile; hold on; title('L-factor: FP16 (overlay) vs FP64 (background)', 'FontSize', 13);
+    for i = 1:numel(detectorsWanted)
+        % FP64 background (lighter, dashed)
+        plot(0:63, S64_L.TPR(i,:), '--', 'Color', detCols(i,:)*0.5 + [0.5 0.5 0.5], 'LineWidth', 2, 'DisplayName', sprintf('%s FP64', detNames{i}));
+        
+        % FP16 overlay (if available)
+        if have_fp16_L
+            plot(0:15, S_L.TPR(i,:), '-o', 'Color', detCols(i,:), 'MarkerFaceColor', detCols(i,:), 'LineWidth', 2, 'MarkerSize', 7, 'DisplayName', sprintf('%s FP16', detNames{i}));
+        end
+    end
+    xlim([0 63]); ylim([0 1]); xlabel('Bit Index'); ylabel('TPR'); grid on;
+    legend('Location', 'eastoutside', 'NumColumns', 1, 'FontSize', 9);
+    decorate_bitaxis_fp64();
+    
+    % Subplot 2: U-factor comparison
+    nexttile; hold on; title('U-factor: FP16 (overlay) vs FP64 (background)', 'FontSize', 13);
+    for i = 1:numel(detectorsWanted)
+        % FP64 background
+        plot(0:63, S64_U.TPR(i,:), '--', 'Color', detCols(i,:)*0.5 + [0.5 0.5 0.5], 'LineWidth', 2, 'DisplayName', sprintf('%s FP64', detNames{i}));
+        
+        % FP16 overlay (if available)
+        if have_fp16_U
+            plot(0:15, S_U.TPR(i,:), '-o', 'Color', detCols(i,:), 'MarkerFaceColor', detCols(i,:), 'LineWidth', 2, 'MarkerSize', 7, 'DisplayName', sprintf('%s FP16', detNames{i}));
+        end
+    end
+    xlim([0 63]); ylim([0 1]); xlabel('Bit Index'); ylabel('TPR'); grid on;
+    legend('Location', 'eastoutside', 'NumColumns', 1, 'FontSize', 9);
+    decorate_bitaxis_fp64();
+    
+    maybe_export_and_close(outDir, saveOutputs, saveFigures, figFormats, figDPI);
+    
+    
+    %% OPTION 2: Class Comparison (Enhanced Bar Chart)
+    fprintf('Creating Option 2: Bit Class Comparison...\n');
+    fig_class = figure('Position', [100 100 1400 700], 'Name', 'FP16_vs_FP64_Classes', 'Color', 'w');
+    tiledlayout(2, 1, 'Padding', 'compact', 'TileSpacing', 'compact');
+    
+    x_pos = 1:3;
+    class_labels = {'Fraction', 'Exponent', 'Sign'};
+    
+    % Subplot 1: L-factor class comparison
+    nexttile; hold on; grid on;
+    title('L-factor: Bit Class Comparison', 'FontSize', 13);
+    
+    for i = 1:numel(detectorsWanted)
+        % Extract FP64 class data
+        fp64_vals = [Scls64_L.TPR(i,1), Scls64_L.TPR(i,2), Scls64_L.TPR(i,3)];
+        
+        % Plot FP64 (dashed line, empty markers)
+        plot(x_pos, fp64_vals, '--s', 'Color', detCols(i,:), 'LineWidth', 2.5, 'MarkerSize', 10, ...
+            'MarkerFaceColor', 'none', 'MarkerEdgeColor', detCols(i,:), 'DisplayName', sprintf('%s FP64', detNames{i}));
+        
+        % Plot FP16 (solid line, filled markers) - if available
+        if have_fp16_cls_L
+            fp16_vals = [Scls_L.TPR(i,1), Scls_L.TPR(i,2), Scls_L.TPR(i,3)];
+            plot(x_pos, fp16_vals, '-o', 'Color', detCols(i,:), 'LineWidth', 2.5, 'MarkerSize', 10, ...
+                'MarkerFaceColor', detCols(i,:), 'DisplayName', sprintf('%s FP16', detNames{i}));
+        end
+    end
+    
+    xticks(x_pos); xticklabels(class_labels);
+    ylabel('TPR', 'FontSize', 11); ylim([0 1.05]);
+    legend('Location', 'eastoutside', 'NumColumns', 1, 'FontSize', 9);
+    
+    % Subplot 2: U-factor class comparison
+    nexttile; hold on; grid on;
+    title('U-factor: Bit Class Comparison', 'FontSize', 13);
+    
+    for i = 1:numel(detectorsWanted)
+        % Extract FP64 class data
+        fp64_vals = [Scls64_U.TPR(i,1), Scls64_U.TPR(i,2), Scls64_U.TPR(i,3)];
+        
+        % Plot FP64
+        plot(x_pos, fp64_vals, '--s', 'Color', detCols(i,:), 'LineWidth', 2.5, 'MarkerSize', 10, ...
+            'MarkerFaceColor', 'none', 'MarkerEdgeColor', detCols(i,:), 'DisplayName', sprintf('%s FP64', detNames{i}));
+        
+        % Plot FP16 - if available
+        if have_fp16_cls_U
+            fp16_vals = [Scls_U.TPR(i,1), Scls_U.TPR(i,2), Scls_U.TPR(i,3)];
+            plot(x_pos, fp16_vals, '-o', 'Color', detCols(i,:), 'LineWidth', 2.5, 'MarkerSize', 10, ...
+                'MarkerFaceColor', detCols(i,:), 'DisplayName', sprintf('%s FP16', detNames{i}));
+        end
+    end
+    
+    xticks(x_pos); xticklabels(class_labels);
+    ylabel('TPR', 'FontSize', 11); ylim([0 1.05]);
+    legend('Location', 'eastoutside', 'NumColumns', 1, 'FontSize', 9);
+    
+    maybe_export_and_close(outDir, saveOutputs, saveFigures, figFormats, figDPI);
+    
+    
+ %% OPTION 3: Enhanced Heatmap with Clear Divisions
+fprintf('Creating Option 3: Enhanced Heatmap...\n');
+fig_heat = figure('Position', [100 100 1400 900], 'Name', 'FP16_vs_FP64_Heatmap', 'Color', 'w');
+tiledlayout(2, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
+
+% L-factor FP16 heatmap
+if have_fp16_L
+    ax1 = nexttile;
+    imagesc(ax1, 0:15, 1:numel(detectorsWanted), S_L.TPR);
+    colorbar(ax1); caxis(ax1, [0 1]); 
+    colormap(ax1, flipud(hot));
+    xlabel(ax1, 'Bit Index'); ylabel(ax1, 'Detector');
+    yticks(ax1, 1:numel(detectorsWanted)); yticklabels(ax1, detNames);
+    title(ax1, 'FP16 L-factor (16 bits)', 'FontSize', 12, 'FontWeight', 'bold');
+    xlim(ax1, [0 16]);
+    
+    % Add clear divisions
+    hold(ax1, 'on');
+    xline(ax1, 9.5, 'k-', 'LineWidth', 3);
+    xline(ax1, 14.5, 'k-', 'LineWidth', 3);
+    xline(ax1, 9.5, 'w--', 'LineWidth', 1.5);
+    xline(ax1, 14.5, 'w--', 'LineWidth', 1.5);
+    
+    ylims = ylim(ax1);
+    patch(ax1, [0 9.5 9.5 0], [ylims(1) ylims(1) ylims(2) ylims(2)], ...
+        [0.7 0.9 1], 'FaceAlpha', 0.1, 'EdgeColor', 'none');
+    patch(ax1, [9.5 14.5 14.5 9.5], [ylims(1) ylims(1) ylims(2) ylims(2)], ...
+        [1 0.9 0.7], 'FaceAlpha', 0.15, 'EdgeColor', 'none');
+    patch(ax1, [14.5 16 16 14.5], [ylims(1) ylims(1) ylims(2) ylims(2)], ...
+        [1 0.7 0.7], 'FaceAlpha', 0.15, 'EdgeColor', 'none');
+    
+    text(ax1, 4.75, ylims(2)+0.4, 'FRAC', 'FontSize', 10, 'FontWeight', 'bold', ...
+        'HorizontalAlignment', 'center', 'Color', [0 0.4 0.8]);
+    text(ax1, 12, ylims(2)+0.4, 'EXP', 'FontSize', 10, 'FontWeight', 'bold', ...
+        'HorizontalAlignment', 'center', 'Color', [0.8 0.4 0]);
+    text(ax1, 15.25, ylims(2)+0.4, 'S', 'FontSize', 10, 'FontWeight', 'bold', ...
+        'HorizontalAlignment', 'center', 'Color', [0.8 0 0]);
+    hold(ax1, 'off');
+end
+
+% L-factor FP64 heatmap
+ax2 = nexttile;
+imagesc(ax2, 0:63, 1:numel(detectorsWanted), S64_L.TPR);
+colorbar(ax2); caxis(ax2, [0 1]); 
+colormap(ax2, flipud(hot));
+xlabel(ax2, 'Bit Index'); ylabel(ax2, 'Detector');
+yticks(ax2, 1:numel(detectorsWanted)); yticklabels(ax2, detNames);
+title(ax2, 'FP64 L-factor (64 bits)', 'FontSize', 12, 'FontWeight', 'bold');
+xlim(ax2, [0 64]);
+
+% Add clear divisions
+hold(ax2, 'on');
+xline(ax2, 51.5, 'k-', 'LineWidth', 3);
+xline(ax2, 62.5, 'k-', 'LineWidth', 3);
+xline(ax2, 51.5, 'w--', 'LineWidth', 1.5);
+xline(ax2, 62.5, 'w--', 'LineWidth', 1.5);
+
+ylims = ylim(ax2);
+patch(ax2, [0 51.5 51.5 0], [ylims(1) ylims(1) ylims(2) ylims(2)], ...
+    [0.7 0.9 1], 'FaceAlpha', 0.1, 'EdgeColor', 'none');
+patch(ax2, [51.5 62.5 62.5 51.5], [ylims(1) ylims(1) ylims(2) ylims(2)], ...
+    [1 0.9 0.7], 'FaceAlpha', 0.15, 'EdgeColor', 'none');
+patch(ax2, [62.5 64 64 62.5], [ylims(1) ylims(1) ylims(2) ylims(2)], ...
+    [1 0.7 0.7], 'FaceAlpha', 0.15, 'EdgeColor', 'none');
+
+text(ax2, 25.75, ylims(2)+0.4, 'FRACTION', 'FontSize', 10, 'FontWeight', 'bold', ...
+    'HorizontalAlignment', 'center', 'Color', [0 0.4 0.8]);
+text(ax2, 57, ylims(2)+0.4, 'EXP', 'FontSize', 10, 'FontWeight', 'bold', ...
+    'HorizontalAlignment', 'center', 'Color', [0.8 0.4 0]);
+text(ax2, 63.25, ylims(2)+0.4, 'S', 'FontSize', 10, 'FontWeight', 'bold', ...
+    'HorizontalAlignment', 'center', 'Color', [0.8 0 0]);
+hold(ax2, 'off');
+
+% U-factor FP16 heatmap
+if have_fp16_U
+    ax3 = nexttile;
+    imagesc(ax3, 0:15, 1:numel(detectorsWanted), S_U.TPR);
+    colorbar(ax3); caxis(ax3, [0 1]); 
+    colormap(ax3, flipud(hot));
+    xlabel(ax3, 'Bit Index'); ylabel(ax3, 'Detector');
+    yticks(ax3, 1:numel(detectorsWanted)); yticklabels(ax3, detNames);
+    title(ax3, 'FP16 U-factor (16 bits)', 'FontSize', 12, 'FontWeight', 'bold');
+    xlim(ax3, [0 16]);
+    
+    % Add clear divisions
+    hold(ax3, 'on');
+    xline(ax3, 9.5, 'k-', 'LineWidth', 3);
+    xline(ax3, 14.5, 'k-', 'LineWidth', 3);
+    xline(ax3, 9.5, 'w--', 'LineWidth', 1.5);
+    xline(ax3, 14.5, 'w--', 'LineWidth', 1.5);
+    
+    ylims = ylim(ax3);
+    patch(ax3, [0 9.5 9.5 0], [ylims(1) ylims(1) ylims(2) ylims(2)], ...
+        [0.7 0.9 1], 'FaceAlpha', 0.1, 'EdgeColor', 'none');
+    patch(ax3, [9.5 14.5 14.5 9.5], [ylims(1) ylims(1) ylims(2) ylims(2)], ...
+        [1 0.9 0.7], 'FaceAlpha', 0.15, 'EdgeColor', 'none');
+    patch(ax3, [14.5 16 16 14.5], [ylims(1) ylims(1) ylims(2) ylims(2)], ...
+        [1 0.7 0.7], 'FaceAlpha', 0.15, 'EdgeColor', 'none');
+    
+    text(ax3, 4.75, ylims(2)+0.4, 'FRAC', 'FontSize', 10, 'FontWeight', 'bold', ...
+        'HorizontalAlignment', 'center', 'Color', [0 0.4 0.8]);
+    text(ax3, 12, ylims(2)+0.4, 'EXP', 'FontSize', 10, 'FontWeight', 'bold', ...
+        'HorizontalAlignment', 'center', 'Color', [0.8 0.4 0]);
+    text(ax3, 15.25, ylims(2)+0.4, 'S', 'FontSize', 10, 'FontWeight', 'bold', ...
+        'HorizontalAlignment', 'center', 'Color', [0.8 0 0]);
+    hold(ax3, 'off');
+end
+
+% U-factor FP64 heatmap
+ax4 = nexttile;
+imagesc(ax4, 0:63, 1:numel(detectorsWanted), S64_U.TPR);
+colorbar(ax4); caxis(ax4, [0 1]); 
+colormap(ax4, flipud(hot));
+xlabel(ax4, 'Bit Index'); ylabel(ax4, 'Detector');
+yticks(ax4, 1:numel(detectorsWanted)); yticklabels(ax4, detNames);
+title(ax4, 'FP64 U-factor (64 bits)', 'FontSize', 12, 'FontWeight', 'bold');
+xlim(ax4, [0 64]);
+
+% Add clear divisions
+hold(ax4, 'on');
+xline(ax4, 51.5, 'k-', 'LineWidth', 3);
+xline(ax4, 62.5, 'k-', 'LineWidth', 3);
+xline(ax4, 51.5, 'w--', 'LineWidth', 1.5);
+xline(ax4, 62.5, 'w--', 'LineWidth', 1.5);
+
+ylims = ylim(ax4);
+patch(ax4, [0 51.5 51.5 0], [ylims(1) ylims(1) ylims(2) ylims(2)], ...
+    [0.7 0.9 1], 'FaceAlpha', 0.1, 'EdgeColor', 'none');
+patch(ax4, [51.5 62.5 62.5 51.5], [ylims(1) ylims(1) ylims(2) ylims(2)], ...
+    [1 0.9 0.7], 'FaceAlpha', 0.15, 'EdgeColor', 'none');
+patch(ax4, [62.5 64 64 62.5], [ylims(1) ylims(1) ylims(2) ylims(2)], ...
+    [1 0.7 0.7], 'FaceAlpha', 0.15, 'EdgeColor', 'none');
+
+text(ax4, 25.75, ylims(2)+0.4, 'FRACTION', 'FontSize', 10, 'FontWeight', 'bold', ...
+    'HorizontalAlignment', 'center', 'Color', [0 0.4 0.8]);
+text(ax4, 57, ylims(2)+0.4, 'EXP', 'FontSize', 10, 'FontWeight', 'bold', ...
+    'HorizontalAlignment', 'center', 'Color', [0.8 0.4 0]);
+text(ax4, 63.25, ylims(2)+0.4, 'S', 'FontSize', 10, 'FontWeight', 'bold', ...
+    'HorizontalAlignment', 'center', 'Color', [0.8 0 0]);
+hold(ax4, 'off');
+
+maybe_export_and_close(outDir, saveOutputs, saveFigures, figFormats, figDPI);
+    
+    %% OPTION 4: Normalized Comparison (Aligned Bit Classes)
+    fprintf('Creating Option 4: Normalized Comparison...\n');
+    fig_norm = figure('Position', [100 100 1600 600], 'Name', 'FP16_vs_FP64_Normalized', 'Color', 'w');
+    tiledlayout(1, 2, 'Padding', 'compact', 'TileSpacing', 'compact');
+    
+    % L-factor normalized
+    nexttile; hold on; grid on;
+    title('L-factor: Normalized by Bit Class', 'FontSize', 13);
+    
+    for i = 1:numel(detectorsWanted)
+        % FP16 normalized positions
+        if have_fp16_L
+            fp16_frac_x = linspace(0, 0.9, 10);
+            fp16_exp_x = linspace(1, 1.9, 5);
+            fp16_sign_x = 3;
+            
+            plot(fp16_frac_x, S_L.TPR(i,1:10), 'o-', 'LineWidth', 2, 'MarkerSize', 6, ...
+                'Color', detCols(i,:), 'MarkerFaceColor', detCols(i,:), 'DisplayName', sprintf('%s FP16', detNames{i}));
+            plot(fp16_exp_x, S_L.TPR(i,11:15), 'o-', 'LineWidth', 2, 'MarkerSize', 6, ...
+                'Color', detCols(i,:), 'HandleVisibility', 'off');
+            plot(fp16_sign_x, S_L.TPR(i,16), 'o', 'MarkerSize', 10, 'LineWidth', 2, ...
+                'Color', detCols(i,:), 'MarkerFaceColor', detCols(i,:), 'HandleVisibility', 'off');
+        end
+        
+        % FP64 normalized positions
+        fp64_frac_x = linspace(0, 0.9, 52);
+        fp64_exp_x = linspace(1, 1.9, 11);
+        fp64_sign_x = 3;
+        
+        plot(fp64_frac_x, S64_L.TPR(i,1:52), 's-', 'LineWidth', 1.5, 'MarkerSize', 3, ...
+            'Color', detCols(i,:)*0.6 + [0.4 0.4 0.4], 'DisplayName', sprintf('%s FP64', detNames{i}));
+        plot(fp64_exp_x, S64_L.TPR(i,53:63), 's-', 'LineWidth', 1.5, 'MarkerSize', 3, ...
+            'Color', detCols(i,:)*0.6 + [0.4 0.4 0.4], 'HandleVisibility', 'off');
+        plot(fp64_sign_x, S64_L.TPR(i,64), 's', 'MarkerSize', 8, 'LineWidth', 2, ...
+            'Color', detCols(i,:)*0.6 + [0.4 0.4 0.4], 'HandleVisibility', 'off');
+    end
+    
+    xlim([-0.2 3.5]); ylim([0 1]);
+    xticks([0.45 1.45 3]); xticklabels({'Fraction', 'Exponent', 'Sign'});
+    ylabel('TPR'); legend('Location', 'best', 'FontSize', 8);
+    xline(0.95, '--k', 'Alpha', 0.3); xline(2.5, '--k', 'Alpha', 0.3);
+    
+    % U-factor normalized
+    nexttile; hold on; grid on;
+    title('U-factor: Normalized by Bit Class', 'FontSize', 13);
+    
+    for i = 1:numel(detectorsWanted)
+        % FP16 normalized positions
+        if have_fp16_U
+            fp16_frac_x = linspace(0, 0.9, 10);
+            fp16_exp_x = linspace(1, 1.9, 5);
+            fp16_sign_x = 3;
+            
+            plot(fp16_frac_x, S_U.TPR(i,1:10), 'o-', 'LineWidth', 2, 'MarkerSize', 6, ...
+                'Color', detCols(i,:), 'MarkerFaceColor', detCols(i,:), 'DisplayName', sprintf('%s FP16', detNames{i}));
+            plot(fp16_exp_x, S_U.TPR(i,11:15), 'o-', 'LineWidth', 2, 'MarkerSize', 6, ...
+                'Color', detCols(i,:), 'HandleVisibility', 'off');
+            plot(fp16_sign_x, S_U.TPR(i,16), 'o', 'MarkerSize', 10, 'LineWidth', 2, ...
+                'Color', detCols(i,:), 'MarkerFaceColor', detCols(i,:), 'HandleVisibility', 'off');
+        end
+        
+        % FP64 normalized positions
+        fp64_frac_x = linspace(0, 0.9, 52);
+        fp64_exp_x = linspace(1, 1.9, 11);
+        fp64_sign_x = 3;
+        
+        plot(fp64_frac_x, S64_U.TPR(i,1:52), 's-', 'LineWidth', 1.5, 'MarkerSize', 3, ...
+            'Color', detCols(i,:)*0.6 + [0.4 0.4 0.4], 'DisplayName', sprintf('%s FP64', detNames{i}));
+        plot(fp64_exp_x, S64_U.TPR(i,53:63), 's-', 'LineWidth', 1.5, 'MarkerSize', 3, ...
+            'Color', detCols(i,:)*0.6 + [0.4 0.4 0.4], 'HandleVisibility', 'off');
+        plot(fp64_sign_x, S64_U.TPR(i,64), 's', 'MarkerSize', 8, 'LineWidth', 2, ...
+            'Color', detCols(i,:)*0.6 + [0.4 0.4 0.4], 'HandleVisibility', 'off');
+    end
+    
+    xlim([-0.2 3.5]); ylim([0 1]);
+    xticks([0.45 1.45 3]); xticklabels({'Fraction', 'Exponent', 'Sign'});
+    ylabel('TPR'); legend('Location', 'best', 'FontSize', 8);
+    xline(0.95, '--k', 'Alpha', 0.3); xline(2.5, '--k', 'Alpha', 0.3);
+    
+    maybe_export_and_close(outDir, saveOutputs, saveFigures, figFormats, figDPI);
+    
+    fprintf('✓ All comparison visualizations generated and saved!\n');
+    fprintf('  - FP16_vs_FP64_SideBySide.png\n');
+    fprintf('  - FP16_vs_FP64_Classes.png\n');
+    fprintf('  - FP16_vs_FP64_Heatmap.png\n');
+    fprintf('  - FP16_vs_FP64_Normalized.png\n\n');
+    
     clear S64_L S64_U Scls64_L Scls64_U bitIdxVec64;
+
 end
 
 % ============================ Global pooled ==============================
@@ -1641,7 +1978,7 @@ if saveOutputs && saveFigures
                     case 'pdf'
                         exportgraphics(fh, [base '.pdf'], 'ContentType', 'vector');
                     case 'svg'
-                        print(fh, [base '.svg'], '-dsvg', '-painters');
+                        print(fh, [base '.svg'], '-dsvg', '-vector');
                     otherwise
                         warning('Unsupported format: %s', fmt);
                 end
