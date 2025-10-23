@@ -16,6 +16,13 @@
 - **Preprint**: [Link when available]
 - **DOI**: [Will be added upon publication]
 
+
+### FP16 vs FP64 Bit Sensitivity Comparison
+
+![FP16 vs FP64 Comparison](figures/FP16_vs_FP64_Heatmap.png)
+
+This figure presents a **bit-level vulnerability analysis** comparing floating-point fault detection across FP16 (16-bit) and FP64 (64-bit) formats for both L-factor and U-factor matrices in LU decomposition. Each heatmap shows the **True Positive Rate (TPR)** of different error detectors for single-bit flips at specific bit positions.
+
 ## 🎯 Overview
 
 This repository contains the MATLAB implementation for evaluating **Algorithm-Based Fault Tolerance (ABFT)** methods in mixed-precision LU decomposition under soft errors (bit-level faults).
