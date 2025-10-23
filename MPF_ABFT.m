@@ -15,8 +15,8 @@ ticTotal = tic;
 % ========================= EASY CONTROL BLOCK ============================
 PROFILE     = 'large';    % 'tiny', 'small', 'medium', 'large'
 SEED_MULT   = 1.0;         % Seed multiplier (0.5 = half seeds for speed)
-SIZE_PRESET = 'tiny';    % 'single' = use PROFILE base size only, 'multi' = sweep sizes
-BASE_PINJECT= 0.20;
+SIZE_PRESET = 'multi';    % 'single' = use PROFILE base size only, 'multi' = sweep sizes
+BASE_PINJECT= 1.0;
 
 % Headless figures
 set(groot,'defaultFigureVisible','off');
@@ -24,7 +24,7 @@ set(groot,'defaultFigureVisible','off');
 % Profile presets
 switch lower(PROFILE)
     case 'tiny'
-        m = 64; n = 64; wb = 32;
+        m = 64; n = 64; wb = 8;
     case 'small'
         m = 128; n = 128; wb = 32;
     case 'medium'
@@ -707,53 +707,153 @@ if doFP64BitSweeps
     ylim([0 1]); grid on; ylabel('TPR'); legend(classes, 'Location','South');
     maybe_export_and_close(outDir, saveOutputs, saveFigures, figFormats, figDPI);
     
-    % Comparison plot: FP16 vs FP64
-    figure('Name','FP16 vs FP64 Comparison','Color','w');
-    tiledlayout(2,2,'Padding','compact','TileSpacing','compact');
+   % ===== Figure 1: L-factor Analysis (FP16 vs FP64) =====
+figure('Name','L-factor: FP16 vs FP64','Color','w','Position',[100 100 900 800]);
+tiledlayout(2,1,'Padding','compact','TileSpacing','compact');
+
+% Subplot 1: L-factor per-bit (FP16 overlaid on FP64)
+nexttile; hold on; title('L-factor: FP16 bits on FP64 scale');
+
+h_legend = [];
+legend_labels = {};
+
+for i=1:numel(detectorsWanted)
+    % Plot FP64 as background (dashed, lighter)
+    h_fp64 = plot(bitIdxVec64, S64_L.TPR(i,:), '--', 'Color', detCols(i,:)*0.4 + [0.6 0.6 0.6], 'LineWidth', 1.5);
+    h_legend(end+1) = h_fp64;
+    legend_labels{end+1} = sprintf('%s FP64', detNames{i});
     
-    % L-factor: FP16 overlaid on FP64
-    nexttile; hold on; title('L-factor: FP16 bits on FP64 scale');
-    for i=1:numel(detectorsWanted)
-        % Plot FP64 as background
-        plot(bitIdxVec64, S64_L.TPR(i,:), '--', 'Color', detCols(i,:)*0.4 + [0.6 0.6 0.6], 'LineWidth', 1);
-        % Plot FP16 overlaid (if available)
-        if exist('S_L', 'var')
-            plot(0:15, S_L.TPR(i,:), '-o', 'Color', detCols(i,:), 'MarkerFaceColor', detCols(i,:), 'LineWidth', 1.5);
-        end
+    % Plot FP16 overlaid (if available)
+    if exist('S_L', 'var')
+        h_fp16 = plot(0:15, S_L.TPR(i,:), '-o', 'Color', detCols(i,:), 'MarkerFaceColor', detCols(i,:), 'LineWidth', 1.5, 'MarkerSize', 6);
+        h_legend(end+1) = h_fp16;
+        legend_labels{end+1} = sprintf('%s FP16', detNames{i});
     end
-    xlim([0 63]); xticks(0:10:63); ylim([0 1]); ylabel('TPR'); grid on; legend(detNames, 'Location','South'); hold off;
+end
+xlim([0 63]); xticks(0:5:63); ylim([0 1]); ylabel('TPR'); grid on; 
+legend(h_legend, legend_labels, 'Location','eastoutside', 'NumColumns', 1, 'FontSize', 9); 
+hold off;
+
+% Subplot 2: L-factor class comparison
+nexttile; hold on; grid on;
+classes_labels = {'frac', 'exp', 'sign'};
+x_pos = 1:3;
+
+h_legend = [];
+legend_labels = {};
+
+% Extract class data
+if exist('Scls_L', 'var')
+    mean_L_frac16 = Scls_L.TPR(:, 1);
+    mean_L_exp16  = Scls_L.TPR(:, 2);
+    mean_L_sign16 = Scls_L.TPR(:, 3);
+else
+    mean_L_frac16 = zeros(numel(detectorsWanted),1);
+    mean_L_exp16  = zeros(numel(detectorsWanted),1);
+    mean_L_sign16 = zeros(numel(detectorsWanted),1);
+end
+
+mean_L_frac64 = Scls64_L.TPR(:, 1);
+mean_L_exp64  = Scls64_L.TPR(:, 2);
+mean_L_sign64 = Scls64_L.TPR(:, 3);
+
+% Plot each detector with consistent colors
+for i = 1:numel(detectorsWanted)
+    % FP64 first (dashed line with empty squares) - same color as top plot
+    h_fp64 = plot(x_pos, [mean_L_frac64(i), mean_L_exp64(i), mean_L_sign64(i)], ...
+        '--s', 'Color', detCols(i,:), 'LineWidth', 2.5, 'MarkerSize', 9, ...
+        'MarkerFaceColor', 'none', 'MarkerEdgeColor', detCols(i,:));
+    h_legend(end+1) = h_fp64;
+    legend_labels{end+1} = sprintf('%s FP64', detNames{i});
     
-    % U-factor: FP16 overlaid on FP64
-    nexttile; hold on; title('U-factor: FP16 bits on FP64 scale');
-    for i=1:numel(detectorsWanted)
-        plot(bitIdxVec64, S64_U.TPR(i,:), '--', 'Color', detCols(i,:)*0.4 + [0.6 0.6 0.6], 'LineWidth', 1);
-        if exist('S_U', 'var')
-            plot(0:15, S_U.TPR(i,:), '-o', 'Color', detCols(i,:), 'MarkerFaceColor', detCols(i,:), 'LineWidth', 1.5);
-        end
-    end
-    xlim([0 63]); xticks(0:10:63); ylim([0 1]); ylabel('TPR'); grid on; legend(detNames, 'Location','South'); hold off;
+    % FP16 (solid line with filled circles) - same color as top plot
+    h_fp16 = plot(x_pos, [mean_L_frac16(i), mean_L_exp16(i), mean_L_sign16(i)], ...
+        '-o', 'Color', detCols(i,:), 'LineWidth', 2.5, 'MarkerSize', 9, ...
+        'MarkerFaceColor', detCols(i,:));
+    h_legend(end+1) = h_fp16;
+    legend_labels{end+1} = sprintf('%s FP16', detNames{i});
+end
+
+xticks(x_pos); xticklabels(classes_labels);
+ylabel('TPR'); ylim([0 1.05]);
+title('L-factor: Class comparison (FP16 vs FP64)');
+legend(h_legend, legend_labels, 'Location', 'eastoutside', 'NumColumns', 1, 'FontSize', 9);
+set(gca, 'FontSize', 11);
+
+maybe_export_and_close(outDir, saveOutputs, saveFigures, figFormats, figDPI);
+
+% ===== Figure 2: U-factor Analysis (FP16 vs FP64) =====
+figure('Name','U-factor: FP16 vs FP64','Color','w','Position',[100 100 900 800]);
+tiledlayout(2,1,'Padding','compact','TileSpacing','compact');
+
+% Subplot 1: U-factor per-bit (FP16 overlaid on FP64)
+nexttile; hold on; title('U-factor: FP16 bits on FP64 scale');
+
+h_legend = [];
+legend_labels = {};
+
+for i=1:numel(detectorsWanted)
+    % Plot FP64 as background (dashed)
+    h_fp64 = plot(bitIdxVec64, S64_U.TPR(i,:), '--', 'Color', detCols(i,:)*0.4 + [0.6 0.6 0.6], 'LineWidth', 1.5);
+    h_legend(end+1) = h_fp64;
+    legend_labels{end+1} = sprintf('%s FP64', detNames{i});
     
-    % Class comparison L
-    nexttile; hold on; title('L-factor: Class comparison');
-    x = 1:numel(detectorsWanted);
-    for c = 1:numel(classes)
-        if exist('Scls_L', 'var')
-            plot(x, Scls_L.TPR(:,c), '-o', 'Color', classCols(c,:), 'MarkerFaceColor', classCols(c,:), 'LineWidth', 1.5, 'DisplayName', ['FP16 ' classes{c}]);
-        end
-        plot(x, Scls64_L.TPR(:,c), '--s', 'Color', classCols(c,:)*0.5, 'MarkerSize', 4, 'LineWidth', 1, 'DisplayName', ['FP64 ' classes{c}]);
+    % Plot FP16 overlaid (if available)
+    if exist('S_U', 'var')
+        h_fp16 = plot(0:15, S_U.TPR(i,:), '-o', 'Color', detCols(i,:), 'MarkerFaceColor', detCols(i,:), 'LineWidth', 1.5, 'MarkerSize', 6);
+        h_legend(end+1) = h_fp16;
+        legend_labels{end+1} = sprintf('%s FP16', detNames{i});
     end
-    xticks(x); xticklabels(detNames); ylim([0 1]); ylabel('TPR'); grid on; legend('Location','South'); hold off;
+end
+xlim([0 63]); xticks(0:5:63); ylim([0 1]); ylabel('TPR'); grid on; 
+legend(h_legend, legend_labels, 'Location','eastoutside', 'NumColumns', 1, 'FontSize', 9); 
+hold off;
+
+% Subplot 2: U-factor class comparison
+nexttile; hold on; grid on;
+
+h_legend = [];
+legend_labels = {};
+
+% Extract class data
+if exist('Scls_U', 'var')
+    mean_U_frac16 = Scls_U.TPR(:, 1);
+    mean_U_exp16  = Scls_U.TPR(:, 2);
+    mean_U_sign16 = Scls_U.TPR(:, 3);
+else
+    mean_U_frac16 = zeros(numel(detectorsWanted),1);
+    mean_U_exp16  = zeros(numel(detectorsWanted),1);
+    mean_U_sign16 = zeros(numel(detectorsWanted),1);
+end
+
+mean_U_frac64 = Scls64_U.TPR(:, 1);
+mean_U_exp64  = Scls64_U.TPR(:, 2);
+mean_U_sign64 = Scls64_U.TPR(:, 3);
+
+% Plot each detector with consistent colors
+for i = 1:numel(detectorsWanted)
+    % FP64 first (dashed line with empty squares) - same color as top plot
+    h_fp64 = plot(x_pos, [mean_U_frac64(i), mean_U_exp64(i), mean_U_sign64(i)], ...
+        '--s', 'Color', detCols(i,:), 'LineWidth', 2.5, 'MarkerSize', 9, ...
+        'MarkerFaceColor', 'none', 'MarkerEdgeColor', detCols(i,:));
+    h_legend(end+1) = h_fp64;
+    legend_labels{end+1} = sprintf('%s FP64', detNames{i});
     
-    % Class comparison U
-    nexttile; hold on; title('U-factor: Class comparison');
-    for c = 1:numel(classes)
-        if exist('Scls_U', 'var')
-            plot(x, Scls_U.TPR(:,c), '-o', 'Color', classCols(c,:), 'MarkerFaceColor', classCols(c,:), 'LineWidth', 1.5, 'DisplayName', ['FP16 ' classes{c}]);
-        end
-        plot(x, Scls64_U.TPR(:,c), '--s', 'Color', classCols(c,:)*0.5, 'MarkerSize', 4, 'LineWidth', 1, 'DisplayName', ['FP64 ' classes{c}]);
-    end
-    xticks(x); xticklabels(detNames); ylim([0 1]); ylabel('TPR'); grid on; legend('Location','South'); hold off;
-    maybe_export_and_close(outDir, saveOutputs, saveFigures, figFormats, figDPI);
+    % FP16 (solid line with filled circles) - same color as top plot
+    h_fp16 = plot(x_pos, [mean_U_frac16(i), mean_U_exp16(i), mean_U_sign16(i)], ...
+        '-o', 'Color', detCols(i,:), 'LineWidth', 2.5, 'MarkerSize', 9, ...
+        'MarkerFaceColor', detCols(i,:));
+    h_legend(end+1) = h_fp16;
+    legend_labels{end+1} = sprintf('%s FP16', detNames{i});
+end
+
+xticks(x_pos); xticklabels(classes_labels);
+ylabel('TPR'); ylim([0 1.05]);
+title('U-factor: Class comparison (FP16 vs FP64)');
+legend(h_legend, legend_labels, 'Location', 'eastoutside', 'NumColumns', 1, 'FontSize', 9);
+set(gca, 'FontSize', 11);
+
+maybe_export_and_close(outDir, saveOutputs, saveFigures, figFormats, figDPI);
     
     % Save FP64 results
     if saveOutputs && saveCSV
@@ -887,6 +987,7 @@ for i=1:numel(detList)
     S.TPR(i,:) = mean(TPR, 1, 'omitnan');
 end
 end
+
 function S = sweep_bit_class_all_detectors(classes, target, precision, A0, m, n, wb, useGPU, detList, aRel, aRat, aHy, aCrossCheck, q, blo, bhi, maskZeroRows, gammaMask, seeds, injCfgBase)
 S.TPR = zeros(numel(detList), numel(classes));
 for i=1:numel(detList)
@@ -1131,9 +1232,6 @@ end
 rel = max(diff) / max(max(abs(c64)), tiny);
 end
 
-% Continue with ALL remaining helper functions...
-% (Due to character limit, I'll include the critical ones. Let me know if you need the rest)
-
 function EXEC = exec_init(detNames)
 EXEC.detNames = detNames;
 nd = numel(detNames);
@@ -1160,7 +1258,7 @@ switch detName
     case 'relative',  alphaVal = aRel;
     case 'ratio',     alphaVal = aRat;
     case 'hybrid',    alphaVal = aHy;
-    case 'crosscheck', alphaVal = aCross;  % Was 'abft'
+    case 'crosscheck', alphaVal = aCross;
     case 'ensemble',  alphaVal = aHy;
     otherwise, error('Unknown detector %s', detName);
 end
@@ -1392,9 +1490,17 @@ imagesc(vals); axis tight;
 colormap([0.85 0.85 0.85; 1.00 0.60 0.00; 0.80 0.10 0.10; 0.10 0.60 0.10]);
 caxis([-0.5 3.5]);
 colorbar('Ticks',0:3,'TickLabels',{'OK','FP','Miss','TP'});
-xlabel('Panel index'); ylabel('Detector');
-yticks(1:numel(detNames)); yticklabels(detNames);
-title('Per-panel Outcomes (Sample Run)'); grid on;
+
+% Fix: Use integer panel indices only
+xticks(1:nb);  
+xticklabels(arrayfun(@num2str, 1:nb, 'UniformOutput', false));
+xlabel('Panel index'); 
+
+ylabel('Detector');
+yticks(1:numel(detNames)); 
+yticklabels(detNames);
+title('Per-panel Outcomes (Sample Run)'); 
+grid on;
 end
 
 function plot_metric_separation_pooled(allRuns, detNames, detCols, doLogY, logFloor, logYMaxQ, showMinorGrid, limitTicks, maxTicks, annotate, captionBottom)
@@ -1509,29 +1615,6 @@ function ensure_dir(d)
 if ~exist(d,'dir'), mkdir(d); end
 end
 
-% function maybe_export_and_close(outDir, saveOutputs, saveFigures, figFormats, figDPI)
-% if saveOutputs && saveFigures
-%     figs = findobj('Type','figure');
-%     for k = 1:numel(figs)
-%         fh = figs(k); nm = get(fh, 'Name');
-%         if isempty(nm), nm = sprintf('Figure_%d', double(fh.Number)); end
-%         nm = regexprep(nm, '[^\w\-]', '_');
-%         base = fullfile(outDir, nm);
-%         for f = 1:numel(figFormats)
-%             try
-%                 if strcmp(figFormats{f}, 'png')
-%                     exportgraphics(fh, [base '.png'], 'Resolution', figDPI);
-%                 end
-%             catch
-%             end
-%         end
-%     end
-% end
-% close all;
-% end
-
-
-
 function maybe_export_and_close(outDir, saveOutputs, saveFigures, figFormats, figDPI)
 if saveOutputs && saveFigures
     figs = findobj('Type','figure');
@@ -1548,21 +1631,12 @@ if saveOutputs && saveFigures
                 switch fmt
                     case 'png'
                         exportgraphics(fh, [base '.png'], 'Resolution', figDPI);
-                        
                     case 'eps'
-                        % EPS export with vector graphics (scalable)
-                        %print(fh, [base '.eps'], '-depsc', '-painters', '-r0');
-                        % Alternative: use exportgraphics (R2020a+)
-                         exportgraphics(fh, [base '.eps'], 'ContentType', 'vector');
-                        
+                        exportgraphics(fh, [base '.eps'], 'ContentType', 'vector');
                     case 'pdf'
-                        % Bonus: PDF export (also scalable)
                         exportgraphics(fh, [base '.pdf'], 'ContentType', 'vector');
-                        
                     case 'svg'
-                        % Bonus: SVG export (web-friendly vector format)
                         print(fh, [base '.svg'], '-dsvg', '-painters');
-                        
                     otherwise
                         warning('Unsupported format: %s', fmt);
                 end
@@ -1574,8 +1648,6 @@ if saveOutputs && saveFigures
 end
 close all;
 end
-
-
 
 function [lo, hi] = binom_wilson_ci(k, n, alpha)
 if nargin < 3, alpha = 0.05; end
