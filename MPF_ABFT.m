@@ -1,4 +1,4 @@
-% MPF_MINIMAL_FP64_16.m
+% MPF_ABFT.m
 % Extended bit-level analysis: FP16 + FP64 precision comparison
 % COMPLETE VERSION with all configurations and sweeps
 
